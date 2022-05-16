@@ -1,79 +1,73 @@
 #include <iostream>
 #include <map>
-#include <string>
-#include <windows.h>
-#include <strsafe.h>
-#include <stdio.h>
-#include "vector"
+#include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include "math.h"
 
 #define CONSOLE_CAPACITY 80//максимальне число символів для найбільшого результату гістограми
 using namespace std;
 
-const int interval = 1024 * 50;//інтервал
+const int interval = 1024 / 2;//інтервал
 map<string, int> statistic;//string - інтервал, int - лічильник файлів, що входять у цей інтервал
 long maxCounter = 0;//максимальна кількість файлів, що потрапляла у проміжок
-
-int dwordToInt(DWORD high, DWORD low);
 
 void countSizeToRange(int size);/*знаходимо проміжок якому належить розмір файлу
  * та інкрементуємо лічильник проміжку*/
 
-void countFile(WIN32_FIND_DATAA file) {//дізнаємося розмір файлу
-    int size = dwordToInt(file.nFileSizeHigh, file.nFileSizeLow);
+void countFile(struct stat &file) {//дізнаємося розмір файлу
+    int size = file.st_size;
     countSizeToRange(size);
 }
 
 void scanAllFilesInDirectory(const string &path) {
     //функція сканує всі файли за даним шляхом
-    string directoryPath = path;
-    directoryPath += "\\*"; // шлях до папки
-    CHAR *currentDirectory = new CHAR[MAX_PATH]{'0'};
-    StringCchCopy(((STRSAFE_LPSTR) currentDirectory), MAX_PATH, ((STRSAFE_LPSTR) directoryPath.c_str()));
-    /*StringCchCopy - Копіює один рядок в інший.
-     * Розмір буфера призначення надається функції,
-     * щоб гарантувати, що вона не записує кінець цього буфера.*/
-    WIN32_FIND_DATAA file;/* WIN32_FIND_DATAA - Містить інформацію про файл,
- * знайдений функцією FindFirstFile, FindFirstFileEx або FindNextFile.*/
-    HANDLE checkFile = FindFirstFileA(currentDirectory, &file);
-    /*FindFirstFileA - Шукає в каталозі файл або підкаталог з іменем, яке відповідає певному імені
-     * (або частковому імені, якщо використовуються символи підстановки).
-     *
-     * Якщо функції не вдається або не вдається знайти файли з рядка пошуку в параметрі currentDirectory,
-     * повертається значення INVALID_HANDLE_VALUE, а вміст file є невизначеним.*/
-    if (INVALID_HANDLE_VALUE == checkFile) {
-        cout << "Error in " << directoryPath << endl;
-        return;
-    }
-    do {
-        if (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {//перевіряємо чи це папка
-            if (strcmp(file.cFileName, ".") &&
-                strcmp(file.cFileName, "..")) { // Пропускаємо папки "." та ".."
-                string nextFolder = path + '\\' + file.cFileName;  // створюємо шлях до папки
-                scanAllFilesInDirectory(nextFolder); //рекурсивно заходимо в неї
+    DIR *dirp = NULL;//DIR - Тип, що представляє потік каталогу
+    dirp = opendir(path.c_str());/*Функція opendir() відкриває потік каталогу,
+ * що відповідає каталогу, названому аргументом path.
+ *
+ * Після успішного завершення opendir() повертає вказівник на об’єкт типу DIR.
+ * В іншому випадку повертається NULL, а errno встановлюється для вказівки на помилку.*/
+    if (dirp == NULL) { cout << "Error in " << path << endl; }
+    struct dirent entry;
+    struct dirent *result = NULL;
+    readdir_r(dirp, &entry, &result);
+    /*Функція readdir_r() ініціалізує структуру dirent, на яку посилається entry, для представлення
+     * запису каталогу в поточній позиції в потоці каталогу, на який посилається dirp, зберігає вказівник
+     * на цю структуру в місці, на яке посилається result, і розміщує потік каталогу в наступний запис.*/
+    char filePath[PATH_MAX];// шлях до файлу
+    while (result != NULL) {
+        struct stat buf;//інформація про файл
+        strncpy(filePath, (path + "/" + entry.d_name).c_str(), PATH_MAX);
+        if (lstat(filePath, &buf) == 0) {/*Функція lstat() отримує інформацію про названий файл
+ * і записує її в область, на яку вказує аргумент buf
+ * Після успішного завершення lstat() повертає 0.
+ * В іншому випадку він повертає -1 і встановлює errno, щоб вказати помилку.*/
+            if (S_ISDIR(buf.st_mode)) { //S_ISDIR - Цей макрос повертає int відмінний від нуля, якщо файл є каталогом.
+                if (strcmp(entry.d_name, ".") &&
+                    strcmp(entry.d_name, "..")) { // Пропускаємо папки "." та ".."
+                    string nextFolder(filePath);
+                    scanAllFilesInDirectory(nextFolder); //рекурсивно заходимо в неї
+                }
+            } else if (S_ISREG(buf.st_mode)) {
+                //S_ISREG - Цей макрос повертає відмінний від нуля, якщо файл є звичайним.
+                countFile(buf);
             }
-        } else {//інакше це файл
-            countFile(file);//рахуємо в якому проміжку належить розмір файлу
+        } else {//lstat не зміг отримати інформацію про файл і повернув не 0
+            cout << "Error in lstat() through" << filePath << endl;
         }
-    } while (FindNextFileA(checkFile, &file) != 0);
-    /* FindNextFileA - Продовжує пошук файлу
-     * Якщо функція виконується успішно, повертається значення відмінне від нуля,
-     * а параметр file містить інформацію про наступний знайдений файл або каталог.
-     * Якщо функція не працює, повертається значення дорівнює нулю,
-     * а вміст file є невизначеним.*/
+        readdir_r(dirp, &entry, &result);//ітеруємося на наступний файл
+    }
+    closedir(dirp);//закриваємо потік
 }
-
 
 void printResult();
 
 int main() {
-    string path = "C:\\Program Files\\Sublime Text 3";
+    string path = "/home/serhii/Documents";
     scanAllFilesInDirectory(path);
     printResult();
     return 0;
-}
-
-int dwordToInt(DWORD high, DWORD low) {
-    return (int) (static_cast<__int64>(high) << 32 | low);
 }
 
 string rangeToString(int start, int finish) {
@@ -122,7 +116,7 @@ void printResult() {
         int size = node.second;
         if (size != 0) {
             cout << node.first << endl;
-            printStarLine((size * coeff));
+            printStarLine(max((size * coeff), 1.0));
         }
     }
 }
