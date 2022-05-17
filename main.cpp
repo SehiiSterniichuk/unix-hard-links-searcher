@@ -58,7 +58,10 @@ void scanAllFilesInDirectory(const string &path) {
  *
  * Після успішного завершення opendir() повертає вказівник на об’єкт типу DIR.
  * В іншому випадку повертається NULL, а errno встановлюється для вказівки на помилку.*/
-    if (dirp == NULL) { cout << "Error in " << path << endl; }
+    if (dirp == NULL) {
+        cout << "Error in " << path << endl;
+        return;
+    }
     struct dirent entry;
     struct dirent *result = NULL;
     readdir_r(dirp, &entry, &result);
