@@ -77,12 +77,12 @@ void scanAllFilesInDirectory(const string &path) {
             if (S_ISDIR(buf.st_mode)) { //S_ISDIR - Цей макрос повертає int відмінний від нуля, якщо файл є каталогом.
                 if (strcmp(entry.d_name, ".") &&
                     strcmp(entry.d_name, "..")) { // Пропускаємо папки "." та ".."
-                    scanAllFilesInDirectory(filePathString); //рекурсивно заходимо в неї
+                    scanAllFilesInDirectory(filePathString); //рекурсивно заходимо в папку
                 }
             } else if (S_ISREG(buf.st_mode) != 0 && buf.st_nlink >= MIN_LINKS_TO_FILE) {
                 //S_ISREG - Цей макрос повертає відмінний від нуля, якщо файл є звичайним.
                 // buf.st_nlink - кількість жорстких посилань на файл
-                scanFile(buf, filePathString);
+                scanFile(buf, filePathString);//опрацьовуємо файл
             }
         } else {//lstat не зміг отримати інформацію про файл і повернув не 0
             cout << "Error in lstat() through" << filePath << endl;
